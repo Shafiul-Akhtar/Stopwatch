@@ -1,0 +1,2 @@
+# No external dependencies are required for this project.
+# Tkinter is included with the Python standard library.
