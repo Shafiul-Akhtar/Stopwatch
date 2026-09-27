@@ -6,3 +6,32 @@ __pycache__/
 .venv/
 venv/
 .DS_Store
+
+# Secrets and environment-sensitive files
+.env
+.env.*
+*.env
+.env.local
+.env.development
+.env.production
+.env.test
+
+# Credential and token files
+*.pem
+*.key
+*.crt
+*.csr
+*.p12
+*.pfx
+*.token
+*.secret
+*.credentials
+credentials.json
+config.local.json
+settings.local.json
+
+# OS / editor metadata
+.idea/
+.vscode/
+*.swp
+*.swo
