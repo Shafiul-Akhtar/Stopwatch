@@ -1,15 +1,15 @@
+import math
 import tkinter as tk
-from tkinter import ttk
 from time import perf_counter
 
 
 class StopwatchApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Stopwatch")
-        self.geometry("420x520")
-        self.minsize(360, 480)
-        self.configure(bg="#f3f4f6")
+        self.title("Wristwatch Stopwatch")
+        self.geometry("520x700")
+        self.minsize(360, 520)
+        self.configure(bg="#0f172a")
 
         self._running = False
         self._elapsed = 0.0
@@ -18,97 +18,252 @@ class StopwatchApp(tk.Tk):
         self._laps = []
 
         self._build_ui()
+        self.bind("<Configure>", self._on_resize)
+        self._sync_state()
         self._update_display(self._elapsed)
 
     def _build_ui(self):
-        title = tk.Label(
-            self,
-            text="Stopwatch",
-            font=("Segoe UI", 24, "bold"),
-            bg="#f3f4f6",
-            fg="#111827",
+        self.scrollbar = tk.Scrollbar(self, orient=tk.VERTICAL)
+        self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self.canvas = tk.Canvas(self, bg="#0f172a", yscrollcommand=self.scrollbar.set, highlightthickness=0)
+        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.scrollbar.config(command=self.canvas.yview)
+
+        self.content = tk.Frame(self.canvas, bg="#0f172a", padx=22, pady=24)
+        self.canvas.create_window((0, 0), window=self.content, anchor="nw", width=self.winfo_width())
+        self.content.bind("<Configure>", self._update_scroll_region)
+        self.canvas.bind("<Configure>", self._on_canvas_resize)
+
+        shell = self.content
+
+        top_bar = tk.Frame(shell, bg="#111827", padx=18, pady=14)
+        top_bar.pack(fill=tk.X, pady=(0, 18))
+
+        self.title_label = tk.Label(
+            top_bar,
+            text="Watch Stopwatch",
+            font=("Segoe UI", 22, "bold"),
+            bg="#111827",
+            fg="#f8fafc",
         )
-        title.pack(pady=(20, 5))
+        self.title_label.pack(anchor="w")
+
+        self.status_label = tk.Label(
+            top_bar,
+            text="READY",
+            font=("Segoe UI", 10, "bold"),
+            bg="#1e293b",
+            fg="#cbd5e1",
+            padx=10,
+            pady=5,
+        )
+        self.status_label.pack(anchor="w", pady=(8, 0))
+
+        watch_panel = tk.Frame(shell, bg="#111827", padx=18, pady=18)
+        watch_panel.pack(fill=tk.BOTH, expand=True, pady=(0, 18))
+
+        watch_canvas = tk.Canvas(
+            watch_panel,
+            width=260,
+            height=260,
+            bg="#111827",
+            highlightthickness=0,
+        )
+        watch_canvas.pack(fill=tk.BOTH, expand=True)
+        self.watch_canvas = watch_canvas
+
+        self._draw_watch_face()
 
         self.time_label = tk.Label(
-            self,
+            watch_panel,
             text="00:00:00.00",
-            font=("Segoe UI", 40, "bold"),
-            bg="#f3f4f6",
-            fg="#0f172a",
+            font=("Segoe UI", 24, "bold"),
+            bg="#111827",
+            fg="#f8fafc",
         )
-        self.time_label.pack(pady=10)
+        self.time_label.pack(anchor="center", pady=(10, 0))
 
-        button_frame = tk.Frame(self, bg="#f3f4f6")
-        button_frame.pack(pady=10)
+        controls = tk.Frame(shell, bg="#0f172a")
+        controls.pack(fill=tk.BOTH, expand=True, pady=(0, 16))
 
-        self.start_button = tk.Button(
-            button_frame,
-            text="Start",
-            width=10,
-            height=2,
-            font=("Segoe UI", 12, "bold"),
-            bg="#22c55e",
-            fg="white",
-            command=self.start,
+        self.start_button = self._make_button(
+            controls,
+            "Start",
+            "#22c55e",
+            "#16a34a",
+            self.start,
         )
-        self.start_button.grid(row=0, column=0, padx=8, pady=8)
+        self.start_button.grid(row=0, column=0, padx=(0, 6), pady=6, sticky="ew")
 
-        self.pause_button = tk.Button(
-            button_frame,
-            text="Pause",
-            width=10,
-            height=2,
-            font=("Segoe UI", 12, "bold"),
-            bg="#f59e0b",
-            fg="white",
-            command=self.pause,
+        self.pause_button = self._make_button(
+            controls,
+            "Pause",
+            "#f59e0b",
+            "#d97706",
+            self.pause,
         )
-        self.pause_button.grid(row=0, column=1, padx=8, pady=8)
+        self.pause_button.grid(row=0, column=1, padx=(6, 0), pady=6, sticky="ew")
 
-        self.reset_button = tk.Button(
-            button_frame,
-            text="Reset",
-            width=10,
-            height=2,
-            font=("Segoe UI", 12, "bold"),
-            bg="#ef4444",
-            fg="white",
-            command=self.reset,
+        self.reset_button = self._make_button(
+            controls,
+            "Reset",
+            "#ef4444",
+            "#dc2626",
+            self.reset,
         )
-        self.reset_button.grid(row=1, column=0, padx=8, pady=8)
+        self.reset_button.grid(row=1, column=0, padx=(0, 6), pady=6, sticky="ew")
 
-        self.lap_button = tk.Button(
-            button_frame,
-            text="Lap",
-            width=10,
-            height=2,
-            font=("Segoe UI", 12, "bold"),
-            bg="#3b82f6",
-            fg="white",
-            command=self.record_lap,
+        self.lap_button = self._make_button(
+            controls,
+            "Lap",
+            "#3b82f6",
+            "#2563eb",
+            self.record_lap,
         )
-        self.lap_button.grid(row=1, column=1, padx=8, pady=8)
+        self.lap_button.grid(row=1, column=1, padx=(6, 0), pady=6, sticky="ew")
 
-        lap_title = tk.Label(
-            self,
-            text="Laps",
-            font=("Segoe UI", 16, "bold"),
-            bg="#f3f4f6",
-            fg="#111827",
+        controls.grid_columnconfigure(0, weight=1)
+        controls.grid_columnconfigure(1, weight=1)
+
+        lap_frame = tk.Frame(
+            shell,
+            bg="#111827",
+            highlightbackground="#334155",
+            highlightthickness=1,
+            padx=12,
+            pady=12,
         )
-        lap_title.pack(pady=(10, 5))
+        lap_frame.pack(fill=tk.BOTH, expand=True)
+
+        self.lap_header = tk.Label(
+            lap_frame,
+            text="Recent laps",
+            font=("Segoe UI", 13, "bold"),
+            bg="#111827",
+            fg="#e2e8f0",
+            anchor="w",
+        )
+        self.lap_header.pack(fill=tk.X, pady=(0, 8))
 
         self.lap_list = tk.Listbox(
-            self,
-            width=28,
-            height=10,
+            lap_frame,
+            height=7,
             font=("Segoe UI", 11),
-            bg="white",
-            fg="#111827",
+            bg="#111827",
+            fg="#f8fafc",
             activestyle="none",
+            borderwidth=0,
+            highlightthickness=0,
+            relief=tk.FLAT,
         )
-        self.lap_list.pack(padx=15, pady=(0, 15), fill=tk.BOTH, expand=True)
+        self.lap_list.pack(fill=tk.BOTH, expand=True)
+
+    def _draw_watch_face(self):
+        canvas = self.watch_canvas
+        canvas.delete("all")
+        w = max(200, min(canvas.winfo_width(), canvas.winfo_height()))
+        cx, cy, r = w / 2, w / 2, w * 0.42
+
+        canvas.create_oval(cx - r, cy - r, cx + r, cy + r, fill="#1e293b", outline="#94a3b8", width=3)
+        canvas.create_oval(cx - r + 12, cy - r + 12, cx + r - 12, cy + r - 12, fill="#0f172a", outline="#334155", width=2)
+
+        for tick in range(60):
+            angle = math.radians(tick * 6)
+            outer_x = cx + math.cos(angle) * (r - 12)
+            outer_y = cy + math.sin(angle) * (r - 12)
+            inner_x = cx + math.cos(angle) * (r - 24)
+            inner_y = cy + math.sin(angle) * (r - 24)
+            width = 3 if tick % 5 == 0 else 1
+            canvas.create_line(outer_x, outer_y, inner_x, inner_y, fill="#e2e8f0", width=width)
+
+        canvas.create_oval(cx - 10, cy - 10, cx + 10, cy + 10, fill="#f8fafc")
+
+        self.watch_hands = {
+            "hour": canvas.create_line(cx, cy, cx, cy - r * 0.45, fill="#f8fafc", width=5, capstyle="round"),
+            "minute": canvas.create_line(cx, cy, cx + r * 0.52, cy - r * 0.09, fill="#22d3ee", width=3, capstyle="round"),
+            "second": canvas.create_line(cx, cy, cx + r * 0.62, cy + r * 0.05, fill="#f87171", width=2, capstyle="round"),
+        }
+
+    def _update_watch_hands(self, total_seconds: float):
+        canvas = self.watch_canvas
+        if not canvas.winfo_exists():
+            return
+        w = max(200, min(canvas.winfo_width(), canvas.winfo_height()))
+        cx, cy = w / 2, w / 2
+        r = w * 0.42
+
+        minutes = (total_seconds % 3600) / 60
+        hours = (total_seconds // 3600) % 12
+        hour_angle = (hours + minutes / 60) * 30
+        minute_angle = minutes * 6
+        second_angle = (total_seconds % 60) * 6
+
+        self._rotate_hand(canvas, self.watch_hands["hour"], cx, cy, r * 0.45, hour_angle)
+        self._rotate_hand(canvas, self.watch_hands["minute"], cx, cy, r * 0.52, minute_angle)
+        self._rotate_hand(canvas, self.watch_hands["second"], cx, cy, r * 0.62, second_angle)
+
+    def _rotate_hand(self, canvas, item_id, cx, cy, length, angle_deg):
+        angle = math.radians(angle_deg - 90)
+        end_x = cx + math.cos(angle) * length
+        end_y = cy + math.sin(angle) * length
+        canvas.coords(item_id, cx, cy, end_x, end_y)
+
+    def _on_canvas_resize(self, event):
+        if hasattr(self, "content"):
+            self.canvas.itemconfig(self.canvas.find_all()[0], width=max(300, event.width - 10))
+            self.canvas.update_idletasks()
+            self._update_scroll_region()
+
+    def _update_scroll_region(self, event=None):
+        self.canvas.update_idletasks()
+        bbox = self.canvas.bbox("all")
+        if bbox:
+            self.canvas.config(scrollregion=bbox)
+
+    def _on_resize(self, event):
+        if event.widget is self:
+            width = max(300, self.winfo_width() - 80)
+            height = max(220, self.winfo_height() - 260)
+            canvas_size = min(width, height)
+            canvas_size = max(180, min(360, canvas_size))
+
+            if self.watch_canvas.winfo_width() != canvas_size:
+                self.watch_canvas.config(width=canvas_size, height=canvas_size)
+            self._draw_watch_face()
+            self._update_display(self._elapsed)
+
+            self.time_label.configure(font=("Segoe UI", max(16, min(24, int(canvas_size * 0.09))), "bold"))
+
+            button_font_size = max(9, min(13, int(canvas_size * 0.055)))
+            button_pad_x = max(4, min(12, int(canvas_size * 0.04)))
+            button_pad_y = max(6, min(12, int(canvas_size * 0.04)))
+
+            for button in [self.start_button, self.pause_button, self.reset_button, self.lap_button]:
+                button.configure(font=("Segoe UI", button_font_size, "bold"))
+                button.configure(padx=button_pad_x, pady=button_pad_y)
+
+            self._update_scroll_region()
+
+    def _make_button(self, parent, text, color, hover_color, command):
+        btn = tk.Button(
+            parent,
+            text=text,
+            font=("Segoe UI", 12, "bold"),
+            bg=color,
+            fg="white",
+            activebackground=hover_color,
+            activeforeground="white",
+            bd=0,
+            relief=tk.FLAT,
+            padx=12,
+            pady=12,
+            cursor="hand2",
+            command=command,
+        )
+        btn.bind("<Enter>", lambda event, c=hover_color: btn.config(bg=c))
+        btn.bind("<Leave>", lambda event, c=color: btn.config(bg=c))
+        return btn
 
     def _format_time(self, total_seconds: float) -> str:
         total_seconds = max(0.0, total_seconds)
@@ -120,11 +275,28 @@ class StopwatchApp(tk.Tk):
 
     def _update_display(self, elapsed_time: float):
         self.time_label.config(text=self._format_time(elapsed_time))
+        self._update_watch_hands(elapsed_time)
+
+    def _sync_state(self):
+        if self._running:
+            self.status_label.config(text="RUNNING", bg="#14532d", fg="#dcfce7")
+            self.start_button.config(state=tk.DISABLED)
+            self.pause_button.config(state=tk.NORMAL)
+            self.lap_button.config(state=tk.NORMAL)
+        else:
+            if self._elapsed > 0:
+                self.status_label.config(text="PAUSED", bg="#78350f", fg="#fef3c7")
+            else:
+                self.status_label.config(text="READY", bg="#1e293b", fg="#cbd5e1")
+            self.start_button.config(state=tk.NORMAL)
+            self.pause_button.config(state=tk.DISABLED)
+            self.lap_button.config(state=tk.DISABLED)
 
     def _tick(self):
         if not self._running:
             return
         elapsed = perf_counter() - self._start_time
+        self._elapsed = elapsed
         self._update_display(elapsed)
         self._timer_id = self.after(10, self._tick)
 
@@ -133,6 +305,7 @@ class StopwatchApp(tk.Tk):
             return
         self._running = True
         self._start_time = perf_counter() - self._elapsed
+        self._sync_state()
         self._tick()
 
     def pause(self):
@@ -144,6 +317,7 @@ class StopwatchApp(tk.Tk):
             self.after_cancel(self._timer_id)
             self._timer_id = None
         self._update_display(self._elapsed)
+        self._sync_state()
 
     def reset(self):
         if self._timer_id is not None:
@@ -155,12 +329,14 @@ class StopwatchApp(tk.Tk):
         self._laps.clear()
         self.lap_list.delete(0, tk.END)
         self._update_display(self._elapsed)
+        self._sync_state()
 
     def record_lap(self):
         if not self._running:
             return
         lap_time = perf_counter() - self._start_time
-        self._laps.insert(0, f"Lap {len(self._laps) + 1}: {self._format_time(lap_time)}")
+        label = f"Lap {len(self._laps) + 1}: {self._format_time(lap_time)}"
+        self._laps.insert(0, label)
         self.lap_list.delete(0, tk.END)
         for lap in self._laps:
             self.lap_list.insert(tk.END, lap)
