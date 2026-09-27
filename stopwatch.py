@@ -8,7 +8,7 @@ class StopwatchApp(tk.Tk):
         super().__init__()
         self.title("Wristwatch Stopwatch")
         self.geometry("520x700")
-        self.minsize(480, 650)
+        self.minsize(360, 520)
         self.configure(bg="#0f172a")
 
         self._running = False
@@ -23,8 +23,19 @@ class StopwatchApp(tk.Tk):
         self._update_display(self._elapsed)
 
     def _build_ui(self):
-        shell = tk.Frame(self, bg="#0f172a", padx=22, pady=24)
-        shell.pack(fill=tk.BOTH, expand=True)
+        self.scrollbar = tk.Scrollbar(self, orient=tk.VERTICAL)
+        self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self.canvas = tk.Canvas(self, bg="#0f172a", yscrollcommand=self.scrollbar.set, highlightthickness=0)
+        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.scrollbar.config(command=self.canvas.yview)
+
+        self.content = tk.Frame(self.canvas, bg="#0f172a", padx=22, pady=24)
+        self.canvas.create_window((0, 0), window=self.content, anchor="nw", width=self.winfo_width())
+        self.content.bind("<Configure>", self._update_scroll_region)
+        self.canvas.bind("<Configure>", self._on_canvas_resize)
+
+        shell = self.content
 
         top_bar = tk.Frame(shell, bg="#111827", padx=18, pady=14)
         top_bar.pack(fill=tk.X, pady=(0, 18))
@@ -50,7 +61,7 @@ class StopwatchApp(tk.Tk):
         self.status_label.pack(anchor="w", pady=(8, 0))
 
         watch_panel = tk.Frame(shell, bg="#111827", padx=18, pady=18)
-        watch_panel.pack(fill=tk.X, pady=(0, 18))
+        watch_panel.pack(fill=tk.BOTH, expand=True, pady=(0, 18))
 
         watch_canvas = tk.Canvas(
             watch_panel,
@@ -59,7 +70,7 @@ class StopwatchApp(tk.Tk):
             bg="#111827",
             highlightthickness=0,
         )
-        watch_canvas.pack(anchor="center")
+        watch_canvas.pack(fill=tk.BOTH, expand=True)
         self.watch_canvas = watch_canvas
 
         self._draw_watch_face()
@@ -74,7 +85,7 @@ class StopwatchApp(tk.Tk):
         self.time_label.pack(anchor="center", pady=(10, 0))
 
         controls = tk.Frame(shell, bg="#0f172a")
-        controls.pack(fill=tk.X, pady=(0, 16))
+        controls.pack(fill=tk.BOTH, expand=True, pady=(0, 16))
 
         self.start_button = self._make_button(
             controls,
@@ -83,7 +94,7 @@ class StopwatchApp(tk.Tk):
             "#16a34a",
             self.start,
         )
-        self.start_button.grid(row=0, column=0, padx=(0, 8), pady=8, sticky="ew")
+        self.start_button.grid(row=0, column=0, padx=(0, 6), pady=6, sticky="ew")
 
         self.pause_button = self._make_button(
             controls,
@@ -92,7 +103,7 @@ class StopwatchApp(tk.Tk):
             "#d97706",
             self.pause,
         )
-        self.pause_button.grid(row=0, column=1, padx=(8, 8), pady=8, sticky="ew")
+        self.pause_button.grid(row=0, column=1, padx=(6, 0), pady=6, sticky="ew")
 
         self.reset_button = self._make_button(
             controls,
@@ -101,7 +112,7 @@ class StopwatchApp(tk.Tk):
             "#dc2626",
             self.reset,
         )
-        self.reset_button.grid(row=1, column=0, padx=(0, 8), pady=8, sticky="ew")
+        self.reset_button.grid(row=1, column=0, padx=(0, 6), pady=6, sticky="ew")
 
         self.lap_button = self._make_button(
             controls,
@@ -110,7 +121,7 @@ class StopwatchApp(tk.Tk):
             "#2563eb",
             self.record_lap,
         )
-        self.lap_button.grid(row=1, column=1, padx=(8, 0), pady=8, sticky="ew")
+        self.lap_button.grid(row=1, column=1, padx=(6, 0), pady=6, sticky="ew")
 
         controls.grid_columnconfigure(0, weight=1)
         controls.grid_columnconfigure(1, weight=1)
@@ -198,15 +209,41 @@ class StopwatchApp(tk.Tk):
         end_y = cy + math.sin(angle) * length
         canvas.coords(item_id, cx, cy, end_x, end_y)
 
+    def _on_canvas_resize(self, event):
+        if hasattr(self, "content"):
+            self.canvas.itemconfig(self.canvas.find_all()[0], width=max(300, event.width - 10))
+            self.canvas.update_idletasks()
+            self._update_scroll_region()
+
+    def _update_scroll_region(self, event=None):
+        self.canvas.update_idletasks()
+        bbox = self.canvas.bbox("all")
+        if bbox:
+            self.canvas.config(scrollregion=bbox)
+
     def _on_resize(self, event):
         if event.widget is self:
-            width = self.winfo_width()
-            height = self.winfo_height()
-            size = min(width, height - 260)
-            target = max(220, min(320, size))
-            self.watch_canvas.config(width=target, height=target)
+            width = max(300, self.winfo_width() - 80)
+            height = max(220, self.winfo_height() - 260)
+            canvas_size = min(width, height)
+            canvas_size = max(180, min(360, canvas_size))
+
+            if self.watch_canvas.winfo_width() != canvas_size:
+                self.watch_canvas.config(width=canvas_size, height=canvas_size)
             self._draw_watch_face()
             self._update_display(self._elapsed)
+
+            self.time_label.configure(font=("Segoe UI", max(16, min(24, int(canvas_size * 0.09))), "bold"))
+
+            button_font_size = max(9, min(13, int(canvas_size * 0.055)))
+            button_pad_x = max(4, min(12, int(canvas_size * 0.04)))
+            button_pad_y = max(6, min(12, int(canvas_size * 0.04)))
+
+            for button in [self.start_button, self.pause_button, self.reset_button, self.lap_button]:
+                button.configure(font=("Segoe UI", button_font_size, "bold"))
+                button.configure(padx=button_pad_x, pady=button_pad_y)
+
+            self._update_scroll_region()
 
     def _make_button(self, parent, text, color, hover_color, command):
         btn = tk.Button(
